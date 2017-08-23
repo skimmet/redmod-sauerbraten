@@ -90,6 +90,7 @@ SERVER_OBJS= \
 	mod/commandhandler-standalone.o \
 	mod/serverctrl-standalone.o \
 	mod/remod-standalone.o \
+	mod/tstmod-standalone.o \
 	mod/rconmod-standalone.o \
 	mod/rconmod_tcp-standalone.o \
 	mod/rconmod_udp-standalone.o \

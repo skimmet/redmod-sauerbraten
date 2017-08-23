@@ -4,6 +4,7 @@
 #include "commandev.h"
 #include "fpsgame.h"
 #include "remod.h"
+#include "tstmod.h"
 
 namespace game
 {
@@ -477,14 +478,6 @@ namespace server
         return cname[cidx];
     }
 
-    #define SERVMODE 1
-    #include "capture.h"
-    #include "ctf.h"
-    #include "collect.h"
-
-    captureservmode capturemode;
-    ctfservmode ctfmode;
-    collectservmode collectmode;
     servmode *smode = NULL;
 
     bool canspawnitem(int type) { return !m_noitems && (type>=I_SHELLS && type<=I_QUAD && (!m_noammo || type<I_SHELLS || type>I_CARTRIDGES)); }
@@ -1712,6 +1705,17 @@ namespace server
     // remod
     VAR(persist, 0, 0, 1);
 
+    #define SERVMODE 1
+    #include "capture.h"
+    #include "ctf.h"
+    #include "collect.h"
+    #include "tstmod.h"
+
+    captureservmode capturemode;
+    ctfservmode ctfmode;
+    collectservmode collectmode;
+    tstservmode tstmode;
+
     void changemap(const char *s, int mode)
     {
         stopdemo();
@@ -1748,11 +1752,14 @@ namespace server
         //remod
         if(m_teammode) { if(!persist) { autoteam(); } else { if(m_ctf) persistautoteam(); } }
 
-
-        if(m_capture) smode = &capturemode;
-        else if(m_ctf) smode = &ctfmode;
-        else if(m_collect) smode = &collectmode;
-        else smode = NULL;
+        #ifdef TSTMOD
+            smode = &tstmode;
+        #else        
+            if(m_capture) smode = &capturemode;
+            else if(m_ctf) smode = &ctfmode;
+            else if(m_collect) smode = &collectmode;
+            else smode = NULL;
+        #endif
 
         if(m_timed && smapname[0]) sendf(-1, 1, "ri2", N_TIMEUP, gamemillis < gamelimit && !interm ? max((gamelimit - gamemillis)/1000, 1) : 0);
         loopv(clients)
@@ -1923,6 +1930,7 @@ namespace server
 
     void startintermission() { gamelimit = min(gamelimit, gamemillis); checkintermission(); }
 
+#if 0
     void dodamage(clientinfo *target, clientinfo *actor, int damage, int gun, const vec &hitpush = vec(0, 0, 0))
     {
         // remod
@@ -1993,6 +2001,42 @@ namespace server
                 remod::addSuicide(target);
                 remod::onevent(ONSUICIDE,  "i", target->clientnum);
             }
+        }
+    }
+
+#endif
+
+    void dodamage(clientinfo *target, clientinfo *actor, int damage, int gun, const vec &hitpush = vec(0, 0, 0)) {
+
+        if (gamemillis < tst::startmillis) return; // HERE'S YOUR F7UCKING PREGAME INVUL. BIATCH
+
+        gamestate &ts = target->state;
+        ts.dodamage(damage);
+        
+        sendf(actor->clientnum, 1, "ri6", N_DAMAGE, target->clientnum, actor->clientnum, damage, ts.armour, ts.health);
+        loopv(clients) if (clients[i] != actor) {
+            sendf(clients[i]->clientnum, 1, "ri6", N_DAMAGE, target->clientnum, target->clientnum, damage, ts.armour, ts.health);
+        }
+        
+        if(target==actor) target->setpushed();
+
+        else if(!hitpush.iszero())
+        {
+            ivec v = vec(hitpush).rescale(DNF);
+            sendf(ts.health<=0 ? -1 : target->ownernum, 1, "ri7", N_HITPUSH, target->clientnum, gun, damage, v.x, v.y, v.z);
+            target->setpushed();
+        }
+
+        if(ts.health<=0)
+        {
+            target->state.deaths++;
+
+            sendf(-1, 1, "ri5", N_DIED, target->clientnum, target->clientnum, target->state.frags, 0);
+            target->position.setsize(0);
+            ts.state = CS_DEAD;
+            ts.lastdeath = gamemillis;
+            ts.deadflush = ts.lastdeath + DEATHMILLIS;
+            if(smode) smode->died(target, actor);
         }
     }
 

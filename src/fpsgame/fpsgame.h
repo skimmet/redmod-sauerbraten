@@ -3,6 +3,7 @@
 
 #include "game.h"
 #include "remod.h"
+#include "tstmod.h"
 
 namespace server
 {
@@ -242,6 +243,8 @@ namespace server
         // remod
         //hashtable<const char *, char *> vars;
         remod::extinfo ext;
+
+        tst::tstinfo tst;
 
         clientinfo() : getdemo(NULL), getmap(NULL), clipboard(NULL), authchallenge(NULL), authkickreason(NULL) { reset(); }
         ~clientinfo() { events.deletecontents(); cleanclipboard(); cleanauth(); }
