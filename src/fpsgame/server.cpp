@@ -1261,7 +1261,7 @@ namespace server
 
         uchar operator[](int msg) const { return msg >= 0 && msg < NUMMSG ? msgmask[msg] : 0; }
     } msgfilter(-1, N_CONNECT, N_SERVINFO, N_INITCLIENT, N_WELCOME, N_MAPCHANGE, N_SERVMSG, N_DAMAGE, N_HITPUSH, N_SHOTFX, N_EXPLODEFX, N_DIED, N_SPAWNSTATE, N_FORCEDEATH, N_TEAMINFO, N_ITEMACC, N_ITEMSPAWN, N_TIMEUP, N_CDIS, N_CURRENTMASTER, N_PONG, N_RESUME, N_BASESCORE, N_BASEINFO, N_BASEREGEN, N_ANNOUNCE, N_SENDDEMOLIST, N_SENDDEMO, N_DEMOPLAYBACK, N_SENDMAP, N_DROPFLAG, N_SCOREFLAG, N_RETURNFLAG, N_RESETFLAG, N_INVISFLAG, N_CLIENT, N_AUTHCHAL, N_INITAI, N_EXPIRETOKENS, N_DROPTOKENS, N_STEALTOKENS, N_DEMOPACKET, -2, N_REMIP, N_NEWMAP, N_GETMAP, N_SENDMAP, N_CLIPBOARD, -3, N_EDITENT, N_EDITF, N_EDITT, N_EDITM, N_FLIP, N_COPY, N_PASTE, N_ROTATE, N_REPLACE, N_DELCUBE, N_EDITVAR, -4, N_POS, NUMMSG),
-      connectfilter(-1, N_CONNECT, -2, N_AUTHANS, -3, N_PING, NUMMSG);
+      connectfilter(-1, N_CONNECT, -2, N_AUTHTRY, N_AUTHANS, -3, N_PING, NUMMSG);
 
     int checktype(int type, clientinfo *ci)
     {
@@ -2280,6 +2280,7 @@ namespace server
         }
 
         loopv(connects) if(totalmillis-connects[i]->connectmillis>15000) disconnect_client(connects[i]->clientnum, DISC_TIMEOUT);
+                        else if (connects[i]->namefakeauthing && totalmillis - connects[i]->namefakeauthing > 5000) disconnect_client(connects[i]->clientnum, DISC_NAMEFAKEPROT);
 
         if(nextexceeded && gamemillis > nextexceeded && (!m_timed || gamemillis < gamelimit))
         {
@@ -2507,6 +2508,8 @@ namespace server
         }
     }
 
+    SVAR(nameprotdomain, "nameprot");
+
     int allowconnect(clientinfo *ci, const char *pwd = "")
     {
         if(ci->local) return DISC_NONE;
@@ -2524,6 +2527,15 @@ namespace server
 
         // remod
         if(checkpban(ip)) return DISC_IPBAN;
+
+        // for now, don't allow users if their name is registered.
+        // this will make them try to claim auth, which will allow them to 
+        // connect anyways. Just like being able to connect if the server
+        // is in private mode.
+        userinfo *u = users.access(userkey(ci->name, nameprotdomain));
+
+        if (u) return DISC_NAMEFAKEPROT;
+
 
         if(mastermode>=MM_PRIVATE && allowedips.find(ip)<0) return DISC_PRIVATE;
         return DISC_NONE;
@@ -2626,6 +2638,11 @@ namespace server
                 if(u)
                 {
                     if(ci->connectauth) connected(ci);
+                    
+                    if (ci->namefakeauthing) {
+                        ci->namefakeauthing = 0;
+                    }
+
                     if(ci->authkickvictim >= 0)
                     {
                         if(setmaster(ci, true, "", ci->authname, ci->authdesc, u->privilege, false, true))
@@ -2748,7 +2765,8 @@ namespace server
         char text[MAXTRANS];
         int type;
         clientinfo *ci = sender>=0 ? getinfo(sender) : NULL, *cq = ci, *cm = ci;
-        if(ci && !ci->connected)
+
+        if(ci && (!ci->connected || ci->namefakeauthing))
         {
             if(chan==0) return;
             else if(chan!=1) { disconnect_client(sender, DISC_MSGERR); return; }
@@ -2769,7 +2787,12 @@ namespace server
                     int disc = allowconnect(ci, password);
                     if(disc)
                     {
-                        if(disc == DISC_LOCAL || !serverauth[0] || strcmp(serverauth, authdesc) || !tryauth(ci, authname, authdesc))
+                        if (disc == DISC_NAMEFAKEPROT) {
+                            ci->namefakeauthing = totalmillis;
+                            sendf(ci->clientnum, 1, "ris", N_REQAUTH, nameprotdomain);
+                        }
+
+                        else if(disc == DISC_LOCAL || !serverauth[0] || strcmp(serverauth, authdesc) || !tryauth(ci, authname, authdesc))
                         {
                             disconnect_client(sender, disc);
                             return;
@@ -2791,6 +2814,16 @@ namespace server
                         disconnect_client(sender, ci->connectauth);
                         return;
                     }
+                    break;
+                }
+
+                case N_AUTHTRY:
+                {
+                    string desc, name;
+                    getstring(desc, p, sizeof(desc));
+                    getstring(name, p, sizeof(name));
+                    tryauth(ci, name, desc);
+                    conoutf("Client %s trying for auth with %s as %s", ci->name, desc, name);
                     break;
                 }
 

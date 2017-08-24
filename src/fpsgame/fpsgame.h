@@ -219,6 +219,7 @@ namespace server
         int playermodel;
         int modevote;
         int privilege;
+        int namefakeauthing;
         bool connected, local, timesync;
         int gameoffset, lastevent, pushed, exceeded;
         gamestate state;
@@ -346,6 +347,7 @@ namespace server
             privilege = PRIV_NONE;
             connected = local = false;
             connectauth = 0;
+            namefakeauthing = 0;
             position.setsize(0);
             messages.setsize(0);
             ping = 0;
