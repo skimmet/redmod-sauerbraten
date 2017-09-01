@@ -100,4 +100,18 @@ namespace tst {
 		sendf(ci->clientnum, 1, "ris", N_SERVMSG, buffer);
 	}
 
+	void toggleautospec(clientinfo *actor, clientinfo *spectator) {
+		autospec(actor, spectator, ! spectator->tst.autospec);
+	}
+
+	void autospec(clientinfo *actor, clientinfo *spectator, bool state) {
+		spectator->tst.autospec = state;
+
+		msgf(spectator, "Autospectating is now \fs%s\fr", state ? "\f0ENABLED" : "\f3DISABLED");
+
+		if (actor != spectator) {
+			msgf(actor, "Autospectating for \"\fs\f1%s\fr\" is now \fs%s\fr", state ? "\f0ENABLED" : "\f3DISABLED");
+		}
+	}
+
 }

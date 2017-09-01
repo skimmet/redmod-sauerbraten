@@ -3392,6 +3392,13 @@ namespace server
                 clientinfo *spinfo = (clientinfo *)getclientinfo(spectator); // no bots
                 if(!spinfo || !spinfo->connected || (spinfo->state.state==CS_SPECTATOR ? val : !val)) break;
 
+                if (!val && tst::roundstarted) {
+                    tst::toggleautospec(ci, spinfo);
+                    break;
+                }
+
+                if (val && tst::roundstarted) tst::autospec(ci, spinfo, true);
+
                 if(spinfo->state.state!=CS_SPECTATOR && val) forcespectator(spinfo);
                 else if(spinfo->state.state==CS_SPECTATOR && !val) unspectate(spinfo);
 
